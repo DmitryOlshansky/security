@@ -52,7 +52,7 @@ public class UtilTests {
         Assert.assertTrue(!WildcardMatcher.match("a*?", "a"));
         Assert.assertTrue(WildcardMatcher.match("a*?", "aa"));
         Assert.assertTrue(WildcardMatcher.match("a*?", "ab"));
-        //Assert.assertTrue(WildcardMatcher.match("a*?", "abb"));
+        Assert.assertTrue(WildcardMatcher.match("a*?", "abb"));
         Assert.assertTrue(WildcardMatcher.match("*my*index", "myindex"));
         Assert.assertTrue(!WildcardMatcher.match("*my*index", "myindex1"));
         Assert.assertTrue(WildcardMatcher.match("*my*index?", "myindex1"));
