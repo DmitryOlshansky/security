@@ -786,71 +786,6 @@ public class ConfigModelV7 extends ConfigModel {
 
     }
 
-    /*public static class TypePerm {
-        private final String typePattern;
-        private final Set<String> perms = new HashSet<>();
-
-        private TypePerm(String typePattern) {
-            super();
-            this.typePattern = Objects.requireNonNull(typePattern);
-            /*if(IGNORED_TYPES.contains(typePattern)) {
-                throw new RuntimeException("typepattern '"+typePattern+"' not allowed");
-            }
-        }
-
-        private TypePerm addPerms(Collection<String> perms) {
-            if (perms != null) {
-                this.perms.addAll(perms);
-            }
-            return this;
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + ((perms == null) ? 0 : perms.hashCode());
-            result = prime * result + ((typePattern == null) ? 0 : typePattern.hashCode());
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj)
-                return true;
-            if (obj == null)
-                return false;
-            if (getClass() != obj.getClass())
-                return false;
-            TypePerm other = (TypePerm) obj;
-            if (perms == null) {
-                if (other.perms != null)
-                    return false;
-            } else if (!perms.equals(other.perms))
-                return false;
-            if (typePattern == null) {
-                if (other.typePattern != null)
-                    return false;
-            } else if (!typePattern.equals(other.typePattern))
-                return false;
-            return true;
-        }
-
-        @Override
-        public String toString() {
-            return System.lineSeparator() + "             typePattern=" + typePattern + System.lineSeparator() + "             perms=" + perms;
-        }
-
-        public String getTypePattern() {
-            return typePattern;
-        }
-
-        public Set<String> getPerms() {
-            return Collections.unmodifiableSet(perms);
-        }
-
-    }*/
-
     public static class Tenant {
         private final String tenant;
         private final boolean readWrite;
@@ -936,38 +871,30 @@ public class ConfigModelV7 extends ConfigModel {
         }));
     }
 
-    private static boolean impliesTypePerm(Set<IndexPattern> ipatterns, Resolved resolved, User user, String[] actions,
-            IndexNameExpressionResolver resolver, ClusterService cs) {
-        Set<String> matchingIndex = new HashSet<>(resolved.getAllIndices());
-
-        for (String in : resolved.getAllIndices()) {
-            //find index patterns who are matching
-            Set<String> matchingActions = new HashSet<>(Arrays.asList(actions));
-            //Set<String> matchingTypes = new HashSet<>(resolved.getTypes(-));
-            for (IndexPattern p : ipatterns) {
-                if (WildcardMatcher.matchAny(p.getResolvedIndexPattern(user, resolver, cs), in)) {
-                    //per resolved index per pattern
-                    //for (String t : resolved.getTypes(-)) {
-                        //for (TypePerm tp : p.typePerms) {
-                            //if (WildcardMatcher.match(tp.typePattern, t)) {
-                                //matchingTypes.remove(t);
-                                for (String a : Arrays.asList(actions)) {
-                                    if (WildcardMatcher.matchAny(p.perms, a)) {
-                                        matchingActions.remove(a);
-                                    }
-                                }
-                            //}
-                        //}
-                    //}
-                }
-            }
-
-            if (matchingActions.isEmpty() /*&& matchingTypes.isEmpty()*/) {
-                matchingIndex.remove(in);
-            }
+    static final class ResolvedIndexPattern{
+        public String[] pattern;
+        public Set<String> perms;
+        public ResolvedIndexPattern(String[] pattern, Set<String> perms) {
+            this.pattern = pattern;
+            this.perms = perms;
         }
+    }
 
-        return matchingIndex.isEmpty();
+    private static boolean impliesTypePerm(Set<IndexPattern> ipatterns, Resolved resolved, User user, String[] actions,
+                                           IndexNameExpressionResolver resolver, ClusterService cs) {
+        Set<String> resolvedIndices = resolved.getAllIndices();
+        List<ResolvedIndexPattern> resolvedIndexPatterns = ipatterns
+                .stream()
+                .map(p -> new ResolvedIndexPattern(p.getResolvedIndexPattern(user, resolver, cs), p.perms))
+                .collect(Collectors.toList());
+        return resolvedIndices
+                .stream()
+                .allMatch(index ->
+                        Arrays.stream(actions).allMatch(action -> resolvedIndexPatterns
+                                .stream()
+                                .anyMatch(rip -> WildcardMatcher.matchAny(rip.pattern, index) && WildcardMatcher.matchAny(rip.perms, action))
+                        )
+                );
     }
     
     
