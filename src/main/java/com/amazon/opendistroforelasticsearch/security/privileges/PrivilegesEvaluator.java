@@ -30,14 +30,7 @@
 
 package com.amazon.opendistroforelasticsearch.security.privileges;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -541,7 +534,7 @@ public class PrivilegesEvaluator implements DCFListener {
             ) ;
     }
 
-    private boolean checkFilteredAliases(Set<String> requestedResolvedIndices, String action) {
+    private boolean checkFilteredAliases(Collection<String> requestedResolvedIndices, String action) {
         //check filtered aliases
         for (String requestAliasOrIndex: requestedResolvedIndices) {
 

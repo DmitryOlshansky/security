@@ -31,14 +31,7 @@
 package com.amazon.opendistroforelasticsearch.security.compliance;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.logging.log4j.LogManager;
@@ -310,7 +303,7 @@ public class ComplianceConfig {
         }
         
         final Resolved resolved = irr.resolveRequest(request);
-        final Set<String> allIndices = resolved.getAllIndices();
+        final Collection<String> allIndices = resolved.getAllIndices();
 
 
         return WildcardMatcher.matchAny(immutableIndicesPatterns, allIndices);
