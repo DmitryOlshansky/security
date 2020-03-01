@@ -45,10 +45,12 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
+import com.google.common.base.Objects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionRequest;
@@ -161,7 +163,7 @@ public final class IndexResolverReplacer implements DCFListener {
         return false;
     }
 
-    private Resolved resolveIndexPatterns(final IndicesOptions indicesOptions, final Object request, final String... requestedPatterns0) {
+    private Resolved resolveIndexPatterns(final IndicesOptions indicesOptions, final Boolean isSearchOrFieldsCapabilities, final String... requestedPatterns0) {
 
         if(log.isTraceEnabled()) {
             log.trace("resolve requestedPatterns: "+ Arrays.toString(requestedPatterns0));
@@ -179,8 +181,7 @@ public final class IndexResolverReplacer implements DCFListener {
 
         final RemoteClusterService remoteClusterService = OpenDistroSecurityPlugin.GuiceHolder.getRemoteClusterService();
 
-        if(remoteClusterService.isCrossClusterSearchEnabled() && request != null
-                && (request instanceof FieldCapabilitiesRequest || request instanceof SearchRequest)) {
+        if(remoteClusterService.isCrossClusterSearchEnabled() && isSearchOrFieldsCapabilities) {
             remoteIndices = new HashSet<>();
             final Map<String, OriginalIndices> remoteClusterIndices = OpenDistroSecurityPlugin.GuiceHolder.getRemoteClusterService()
                     .groupIndices(indicesOptions, requestedPatterns0, idx -> resolver.hasIndexOrAlias(idx, clusterService.state()));
@@ -285,6 +286,32 @@ public final class IndexResolverReplacer implements DCFListener {
         }, false);
     }
 
+    static final class IndexResolveKey {
+        final IndicesOptions opts;
+        final boolean isSearchOrFieldCapabilities;
+        final String[] original;
+        public IndexResolveKey(IndicesOptions opts, boolean isSearchOrFieldCapabilities, String[] original) {
+            this.opts = opts;
+            this.isSearchOrFieldCapabilities = isSearchOrFieldCapabilities;
+            this.original = original;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            IndexResolveKey that = (IndexResolveKey) o;
+            return isSearchOrFieldCapabilities == that.isSearchOrFieldCapabilities &&
+                    Objects.equal(opts, that.opts) &&
+                    Arrays.equals(original, that.original);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(opts, isSearchOrFieldCapabilities) + 31*Arrays.hashCode(original);
+        }
+    }
+
     public Resolved resolveRequest(final Object request) {
         if(log.isDebugEnabled()) {
             log.debug("Resolve aliases, indices and types from {}", request.getClass().getSimpleName());
@@ -293,18 +320,26 @@ public final class IndexResolverReplacer implements DCFListener {
         final Resolved.Builder resolvedBuilder = new Resolved.Builder();
         final AtomicBoolean isIndicesRequest = new AtomicBoolean();
         getOrReplaceAllIndices(request, new IndicesProvider() {
+            // resolve cache helps us big time on bulk requests
+            final ConcurrentHashMap<IndexResolveKey, Resolved> cache = new ConcurrentHashMap<>();
 
             @Override
             public String[] provide(String[] original, Object localRequest, boolean supportsReplace) {
                 final IndicesOptions indicesOptions = indicesOptionsFrom(localRequest);
-                final Resolved iResolved = resolveIndexPatterns(indicesOptions, localRequest, original);
-                resolvedBuilder.add(iResolved);
-                isIndicesRequest.set(true);
+                final boolean isSearchOrFieldCapabilities = localRequest instanceof FieldCapabilitiesRequest || localRequest instanceof SearchRequest;
+                final IndexResolveKey lookup = new IndexResolveKey(indicesOptions, isSearchOrFieldCapabilities, original);
+                // skip the whole thing if we have seen this exact resolveIndexPatterns result
+                if (cache.get(lookup) == null) {
+                    final Resolved iResolved = cache.computeIfAbsent(lookup, key ->
+                            resolveIndexPatterns(key.opts, key.isSearchOrFieldCapabilities, key.original)
+                    );
+                    resolvedBuilder.add(iResolved);
+                    isIndicesRequest.set(true);
 
-                if(log.isTraceEnabled()) {
-                    log.trace("Resolved patterns {} for {} ({}) to {}", original, localRequest.getClass().getSimpleName(), request.getClass().getSimpleName(), iResolved);
+                    if (log.isTraceEnabled()) {
+                        log.trace("Resolved patterns {} for {} ({}) to {}", original, localRequest.getClass().getSimpleName(), request.getClass().getSimpleName(), iResolved);
+                    }
                 }
-
                 return IndicesProvider.NOOP;
             }
         }, false);
