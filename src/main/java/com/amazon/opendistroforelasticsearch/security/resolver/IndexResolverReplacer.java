@@ -208,9 +208,9 @@ public final class IndexResolverReplacer implements DCFListener {
             remoteIndices = Collections.emptySet();
         }
 
-        final Set<String> matchingAliases;
-        final Set<String> matchingIndices;
-        final Set<String> matchingAllIndices;
+        final Collection<String> matchingAliases;
+        final Collection<String> matchingIndices;
+        final Collection<String> matchingAllIndices;
 
         if (isLocalAll(requestedPatterns0)) {
             if (log.isTraceEnabled()) {
@@ -232,25 +232,19 @@ public final class IndexResolverReplacer implements DCFListener {
             ClusterState state = clusterService.state();
 
             final SortedMap<String, AliasOrIndex> lookup = state.metaData().getAliasAndIndexLookup();
-            final Set<String> aliases = lookup.entrySet().stream().filter(e -> e.getValue().isAlias()).map(e -> e.getKey())
-                    .collect(Collectors.toSet());
+            final List<String> aliases = lookup.entrySet().stream().filter(e -> e.getValue().isAlias()).map(e -> e.getKey())
+                    .collect(Collectors.toList());
 
-            matchingAliases = new HashSet<>(localRequestedPatterns.size() * 10);
-            matchingIndices = new HashSet<>(localRequestedPatterns.size() * 10);
-            matchingAllIndices = new HashSet<>(localRequestedPatterns.size() * 10);
-
+            List<String> dateResolvedLocalRequestedPatterns = localRequestedPatterns
+                            .stream()
+                            .map(resolver::resolveDateMathExpression)
+                            .collect(Collectors.toList());
             //fill matchingAliases
-            for (String localRequestedPattern : localRequestedPatterns) {
-                final String requestedPattern = resolver.resolveDateMathExpression(localRequestedPattern);
-                final List<String> _aliases = WildcardMatcher.getMatchAny(requestedPattern, aliases);
-                matchingAliases.addAll(_aliases);
-            }
-
+            matchingAliases = WildcardMatcher.getMatchAny(dateResolvedLocalRequestedPatterns, aliases);
 
             List<String> _indices;
             try {
-                _indices = new ArrayList<>(
-                        Arrays.asList(resolver.concreteIndexNames(state, indicesOptions, localRequestedPatterns.toArray(new String[0]))));
+                _indices = Arrays.asList(resolver.concreteIndexNames(state, indicesOptions, localRequestedPatterns.toArray(new String[0])));
                 if (log.isDebugEnabled()) {
                     log.debug("Resolved pattern {} to {}", localRequestedPatterns, _indices);
                 }
@@ -259,31 +253,24 @@ public final class IndexResolverReplacer implements DCFListener {
                     log.debug("No such indices for pattern {}, use raw value", localRequestedPatterns);
                 }
 
-                _indices = new ArrayList<>(localRequestedPatterns.size());
-
-                for (String requestedPattern : localRequestedPatterns) {
-                    _indices.add(resolver.resolveDateMathExpression(requestedPattern));
-                }
-
+                _indices = dateResolvedLocalRequestedPatterns;
             }
 
-            final List<String> _aliases = WildcardMatcher.getMatchAny(localRequestedPatterns.toArray(new String[0]), aliases);
+            matchingAllIndices = _indices;
 
-            matchingAllIndices.addAll(_indices);
-
-            if (_aliases.isEmpty()) {
-                matchingIndices.addAll(_indices); //date math resolved?
+            if (matchingAliases.isEmpty()) {
+                matchingIndices = _indices; //date math resolved?
             } else {
 
                 if (!_indices.isEmpty()) {
-
-                    for (String al : _aliases) {
-                        Set<String> doubleIndices = lookup.get(al).getIndices().stream().map(a -> a.getIndex().getName()).collect(Collectors.toSet());
-                        _indices.removeAll(doubleIndices);
+                    HashSet<String> copy = new HashSet<>(_indices);
+                    for (String al : matchingAliases) {
+                        lookup.get(al).getIndices().stream().map(a -> a.getIndex().getName()).forEach(copy::remove);
                     }
-
-                    matchingIndices.addAll(_indices);
+                    matchingIndices = copy;
                 }
+                else
+                    matchingIndices = _indices;
             }
         }
 
