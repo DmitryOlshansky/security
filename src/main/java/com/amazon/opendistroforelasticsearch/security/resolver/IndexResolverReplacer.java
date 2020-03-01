@@ -327,16 +327,19 @@ public final class IndexResolverReplacer implements DCFListener {
             public String[] provide(String[] original, Object localRequest, boolean supportsReplace) {
                 final IndicesOptions indicesOptions = indicesOptionsFrom(localRequest);
                 final boolean isSearchOrFieldCapabilities = localRequest instanceof FieldCapabilitiesRequest || localRequest instanceof SearchRequest;
-                final Resolved iResolved = cache.computeIfAbsent(new IndexResolveKey(indicesOptions, isSearchOrFieldCapabilities, original), key ->
-                    resolveIndexPatterns(key.opts, key.isSearchOrFieldCapabilities, key.original)
-                );
-                resolvedBuilder.add(iResolved);
-                isIndicesRequest.set(true);
+                final IndexResolveKey lookup = new IndexResolveKey(indicesOptions, isSearchOrFieldCapabilities, original);
+                // skip the whole thing if we have seen this exact resolveIndexPatterns result
+                if (cache.get(lookup) == null) {
+                    final Resolved iResolved = cache.computeIfAbsent(lookup, key ->
+                            resolveIndexPatterns(key.opts, key.isSearchOrFieldCapabilities, key.original)
+                    );
+                    resolvedBuilder.add(iResolved);
+                    isIndicesRequest.set(true);
 
-                if(log.isTraceEnabled()) {
-                    log.trace("Resolved patterns {} for {} ({}) to {}", original, localRequest.getClass().getSimpleName(), request.getClass().getSimpleName(), iResolved);
+                    if (log.isTraceEnabled()) {
+                        log.trace("Resolved patterns {} for {} ({}) to {}", original, localRequest.getClass().getSimpleName(), request.getClass().getSimpleName(), iResolved);
+                    }
                 }
-
                 return IndicesProvider.NOOP;
             }
         }, false);
