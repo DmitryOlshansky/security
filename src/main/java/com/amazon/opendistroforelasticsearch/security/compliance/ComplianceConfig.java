@@ -69,7 +69,7 @@ public class ComplianceConfig {
     private final Logger log = LogManager.getLogger(getClass());
     private final Settings settings;
 	private final Map<Wildcard, Set<String>> readEnabledFields = new HashMap<>(100);
-    private final List<String> watchedWriteIndices;
+    private final Wildcard watchedWriteIndices;
     private DateTimeFormatter auditLogPattern = null;
     private String auditLogIndex = null;
     private final boolean logDiffsForWrite;
@@ -78,7 +78,7 @@ public class ComplianceConfig {
     private final boolean logExternalConfig;
     private final boolean logInternalConfig;
     private final LoadingCache<String, Set<String>> cache;
-    private final Set<String> immutableIndicesPatterns;
+    private final Wildcard immutableIndicesPatterns;
     private final byte[] salt16;
     private final String opendistrosecurityIndex;
     private final IndexResolverReplacer irr;
@@ -96,13 +96,13 @@ public class ComplianceConfig {
         final List<String> watchedReadFields = this.settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_READ_WATCHED_FIELDS,
                 Collections.emptyList(), false);
 
-        watchedWriteIndices = settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_WATCHED_INDICES, Collections.emptyList());
+        watchedWriteIndices = Wildcard.caseSensitiveAny(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_WATCHED_INDICES, Collections.emptyList()));
         logDiffsForWrite = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_LOG_DIFFS, false);
         logWriteMetadataOnly = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_METADATA_ONLY, false);
         logReadMetadataOnly = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_READ_METADATA_ONLY, false);
         logExternalConfig = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_EXTERNAL_CONFIG_ENABLED, false);
         logInternalConfig = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_INTERNAL_CONFIG_ENABLED, false);
-        immutableIndicesPatterns = new HashSet<String>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_IMMUTABLE_INDICES, Collections.emptyList()));
+        immutableIndicesPatterns = Wildcard.caseSensitiveAny(new HashSet<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_IMMUTABLE_INDICES, Collections.emptyList())));
         final String saltAsString = settings.get(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_SALT, ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_SALT_DEFAULT);
         final byte[] saltAsBytes = saltAsString.getBytes(StandardCharsets.UTF_8);
 
@@ -232,7 +232,7 @@ public class ComplianceConfig {
             }
         }
 
-        return WildcardMatcher.matchAny(watchedWriteIndices, index);
+        return watchedWriteIndices.matches(index);
     }
 
     //no patterns here as parameters
@@ -308,7 +308,7 @@ public class ComplianceConfig {
             return false;
         }
         
-        if(immutableIndicesPatterns.isEmpty()) {
+        if(immutableIndicesPatterns == Wildcard.NONE) {
             return false;
         }
         
@@ -316,7 +316,7 @@ public class ComplianceConfig {
         final Collection<String> allIndices = resolved.getAllIndices();
 
 
-        return WildcardMatcher.matchAny(immutableIndicesPatterns, allIndices);
+        return immutableIndicesPatterns.matchesAny(allIndices);
     }
 
     public byte[] getSalt16() {
