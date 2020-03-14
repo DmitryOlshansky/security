@@ -950,7 +950,7 @@ public class ConfigModelV7 extends ConfigModel {
 
     private static boolean impliesTypePerm(Set<IndexPattern> ipatterns, Resolved resolved, User user, String[] requestedActions,
                                            IndexNameExpressionResolver resolver, ClusterService cs) {
-        Set<String> resolvedRequestedIndices = resolved.getAllIndices();
+        Collection<String> resolvedRequestedIndices = resolved.getAllIndices();
         IndexPatternsAndPermissions[] indexPatternsAndPermissions = ipatterns
                 .stream()
                 .map(p -> new IndexPatternsAndPermissions(p.getResolvedIndexPattern(user, resolver, cs), p.perms))
