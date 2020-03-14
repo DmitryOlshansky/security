@@ -32,7 +32,6 @@ package com.amazon.opendistroforelasticsearch.security.resolver;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -45,7 +44,6 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
@@ -163,7 +161,7 @@ public final class IndexResolverReplacer implements DCFListener {
         return false;
     }
 
-    private Resolved resolveIndexPatterns(final IndicesOptions indicesOptions, final Boolean isSearchOrFieldsCapabilities, final String... requestedPatterns0) {
+    private Resolved resolveIndexPatterns(final IndicesOptions indicesOptions, final boolean isSearchOrFieldsCapabilities, final String... requestedPatterns0) {
 
         if(log.isTraceEnabled()) {
             log.trace("resolve requestedPatterns: "+ Arrays.toString(requestedPatterns0));
@@ -319,9 +317,10 @@ public final class IndexResolverReplacer implements DCFListener {
 
         final Resolved.Builder resolvedBuilder = new Resolved.Builder();
         final AtomicBoolean isIndicesRequest = new AtomicBoolean();
+
         getOrReplaceAllIndices(request, new IndicesProvider() {
             // resolve cache helps us big time on bulk requests
-            final ConcurrentHashMap<IndexResolveKey, Resolved> cache = new ConcurrentHashMap<>();
+            final HashMap<IndexResolveKey, Resolved> cache = new HashMap<>();
 
             @Override
             public String[] provide(String[] original, Object localRequest, boolean supportsReplace) {
@@ -634,7 +633,7 @@ public final class IndexResolverReplacer implements DCFListener {
     /**
      * new
      * @param request
-     * @param newIndices
+     * @param allowEmptyIndices
      * @return
      */
     @SuppressWarnings("rawtypes")
