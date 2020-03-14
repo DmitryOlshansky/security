@@ -33,6 +33,7 @@ import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import com.amazon.opendistroforelasticsearch.security.DefaultObjectMapper;
+import com.amazon.opendistroforelasticsearch.security.support.wildcard.Wildcard;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,10 +96,10 @@ public abstract class AbstractAuditLog implements AuditLog {
     protected final boolean logRequestBody;
     protected final boolean resolveIndices;
 
-    private List<String> ignoredAuditUsers;
-    private List<String> ignoredComplianceUsersForRead;
-    private List<String> ignoredComplianceUsersForWrite;
-    private final List<String> ignoreAuditRequests;
+    private final Wildcard ignoredAuditUsers;
+    private final Wildcard ignoredComplianceUsersForRead;
+    private final Wildcard ignoredComplianceUsersForWrite;
+    private final Wildcard ignoreAuditRequests;
     private final EnumSet<AuditCategory> disabledRestCategories;
     private final EnumSet<AuditCategory> disabledTransportCategories;
     private final List<String> defaultIgnoredUsers = Arrays.asList("kibanaserver");
@@ -157,7 +158,7 @@ public abstract class AbstractAuditLog implements AuditLog {
         logRequestBody = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_LOG_REQUEST_BODY, true);
         resolveIndices = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_RESOLVE_INDICES, true);
 
-        ignoredAuditUsers = new ArrayList<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_IGNORE_USERS, defaultIgnoredUsers));
+        List<String> ignoredAuditUsers = new ArrayList<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_IGNORE_USERS, defaultIgnoredUsers));
 
         if(ignoredAuditUsers.size() == 1 && "NONE".equals(ignoredAuditUsers.get(0))) {
             ignoredAuditUsers.clear();
@@ -166,8 +167,9 @@ public abstract class AbstractAuditLog implements AuditLog {
         if (ignoredAuditUsers.size() > 0) {
             log.info("Configured Users to ignore: {}", ignoredAuditUsers);
         }
+        this.ignoredAuditUsers = Wildcard.caseSensitiveAny(ignoredAuditUsers);
 
-        ignoredComplianceUsersForRead = new ArrayList<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_READ_IGNORE_USERS, defaultIgnoredUsers));
+        List<String> ignoredComplianceUsersForRead = new ArrayList<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_READ_IGNORE_USERS, defaultIgnoredUsers));
 
         if(ignoredComplianceUsersForRead.size() == 1 && "NONE".equals(ignoredComplianceUsersForRead.get(0))) {
             ignoredComplianceUsersForRead.clear();
@@ -176,8 +178,9 @@ public abstract class AbstractAuditLog implements AuditLog {
         if (ignoredComplianceUsersForRead.size() > 0) {
             log.info("Configured Users to ignore for read compliance events: {}", ignoredComplianceUsersForRead);
         }
+        this.ignoredComplianceUsersForRead = Wildcard.caseSensitiveAny(ignoredComplianceUsersForRead);
 
-        ignoredComplianceUsersForWrite = new ArrayList<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_IGNORE_USERS, defaultIgnoredUsers));
+        List<String> ignoredComplianceUsersForWrite = new ArrayList<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_IGNORE_USERS, defaultIgnoredUsers));
 
         if(ignoredComplianceUsersForWrite.size() == 1 && "NONE".equals(ignoredComplianceUsersForWrite.get(0))) {
             ignoredComplianceUsersForWrite.clear();
@@ -186,11 +189,14 @@ public abstract class AbstractAuditLog implements AuditLog {
         if (ignoredComplianceUsersForWrite.size() > 0) {
             log.info("Configured Users to ignore for write compliance events: {}", ignoredComplianceUsersForWrite);
         }
+        this.ignoredComplianceUsersForWrite = Wildcard.caseSensitiveAny(ignoredComplianceUsersForWrite);
 
-        ignoreAuditRequests = settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_IGNORE_REQUESTS, Collections.emptyList());
+
+        List<String> ignoreAuditRequests = settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_IGNORE_REQUESTS, Collections.emptyList());
         if (ignoreAuditRequests.size() > 0) {
             log.info("Configured Requests to ignore: {}", ignoreAuditRequests);
         }
+        this.ignoreAuditRequests = Wildcard.caseSensitiveAny(ignoreAuditRequests);
 
         this.excludeSensitiveHeaders = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_EXCLUDE_SENSITIVE_HEADERS, true);
     }
@@ -741,7 +747,7 @@ public abstract class AbstractAuditLog implements AuditLog {
             return false;
         }
 
-        if (ignoredAuditUsers.size() > 0 && WildcardMatcher.matchAny(ignoredAuditUsers, effectiveUser)) {
+        if (ignoredAuditUsers.matches(effectiveUser)) {
 
             if(log.isTraceEnabled()) {
                 log.trace("Skipped audit log message because of user {} is ignored", effectiveUser);
@@ -750,8 +756,8 @@ public abstract class AbstractAuditLog implements AuditLog {
             return false;
         }
 
-        if (request != null && ignoreAuditRequests.size() > 0
-                && (WildcardMatcher.matchAny(ignoreAuditRequests, action) || WildcardMatcher.matchAny(ignoreAuditRequests, request.getClass().getSimpleName()))) {
+        if (request != null &&
+            (ignoreAuditRequests.matches(action) || ignoreAuditRequests.matches(request.getClass().getSimpleName()))) {
 
             if(log.isTraceEnabled()) {
                 log.trace("Skipped audit log message because request {} is ignored", action+"#"+request.getClass().getSimpleName());
@@ -791,8 +797,7 @@ public abstract class AbstractAuditLog implements AuditLog {
         }
 
         if(category == AuditCategory.COMPLIANCE_DOC_READ || category == AuditCategory.COMPLIANCE_INTERNAL_CONFIG_READ) {
-            if (ignoredComplianceUsersForRead.size() > 0 && effectiveUser != null
-                    && WildcardMatcher.matchAny(ignoredComplianceUsersForRead, effectiveUser)) {
+            if (effectiveUser != null && ignoredComplianceUsersForRead.matches(effectiveUser)) {
 
                 if(log.isTraceEnabled()) {
                     log.trace("Skipped compliance log message because of user {} is ignored", effectiveUser);
@@ -802,8 +807,7 @@ public abstract class AbstractAuditLog implements AuditLog {
         }
 
         if(category == AuditCategory.COMPLIANCE_DOC_WRITE || category == AuditCategory.COMPLIANCE_INTERNAL_CONFIG_WRITE) {
-            if (ignoredComplianceUsersForWrite.size() > 0 && effectiveUser != null
-                    && WildcardMatcher.matchAny(ignoredComplianceUsersForWrite, effectiveUser)) {
+            if (effectiveUser != null && ignoredComplianceUsersForWrite.matches(effectiveUser)) {
 
                 if(log.isTraceEnabled()) {
                     log.trace("Skipped compliance log message because of user {} is ignored", effectiveUser);
@@ -832,7 +836,7 @@ public abstract class AbstractAuditLog implements AuditLog {
 
         }
 
-        if (ignoredAuditUsers.size() > 0 && WildcardMatcher.matchAny(ignoredAuditUsers, effectiveUser)) {
+        if (ignoredAuditUsers.matches(effectiveUser)) {
 
             if(log.isTraceEnabled()) {
                 log.trace("Skipped audit log message because of user {} is ignored", effectiveUser);
@@ -841,8 +845,7 @@ public abstract class AbstractAuditLog implements AuditLog {
             return false;
         }
 
-        if (request != null && ignoreAuditRequests.size() > 0
-                && (WildcardMatcher.matchAny(ignoreAuditRequests, request.path()))) {
+        if (request != null && ignoreAuditRequests.matches(request.path())) {
 
             if(log.isTraceEnabled()) {
                 log.trace("Skipped audit log message because request {} is ignored", request.path());
