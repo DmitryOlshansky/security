@@ -38,7 +38,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import com.amazon.opendistroforelasticsearch.security.support.wildcard.Wildcard;
+import com.amazon.opendistroforelasticsearch.security.support.WildcardMatcher;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
@@ -52,11 +52,14 @@ public final class DefaultInterClusterRequestEvaluator implements InterClusterRe
 
     private final Logger log = LogManager.getLogger(this.getClass());
     private final String certOid;
-    private final Wildcard nodesDn;
+    private final WildcardMatcher nodesDn;
 
     public DefaultInterClusterRequestEvaluator(final Settings settings) {
         this.certOid = settings.get(ConfigConstants.OPENDISTRO_SECURITY_CERT_OID, "1.2.3.4.5.5");
-        this.nodesDn = Wildcard.caseInsensitiveAny(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_NODES_DN, Collections.emptyList()));
+        this.nodesDn = WildcardMatcher.pattern(
+                settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_NODES_DN, Collections.emptyList()),
+                false
+        );
     }
 
     @Override
@@ -70,7 +73,7 @@ public final class DefaultInterClusterRequestEvaluator implements InterClusterRe
             principals[1] = principal.replace(" ","");
         }
         
-        if (principals[0] != null && nodesDn.matchesAny(principals)) {
+        if (principals[0] != null && nodesDn.matchAny(principals)) {
             
             if (log.isTraceEnabled()) {
                 log.trace("Treat certificate with principal {} as other node because of it matches one of {}", Arrays.toString(principals),

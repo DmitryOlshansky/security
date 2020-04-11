@@ -13,7 +13,7 @@
 opendistro_security.advanced_modules_enabled: true
 
 # Specify a list of DNs which denote the other nodes in the cluster.
-# This settings support wildcards and regular expressions
+# This settings support WildcardMatchers and regular expressions
 # This setting only has effect if 'opendistro_security.cert.intercluster_request_evaluator_class' is not set.
 opendistro_security.nodes_dn:
   - "CN=*.example.com, OU=SSL, O=Test, L=Test, C=DE"
@@ -64,7 +64,7 @@ opendistro_security.roles_mapping_resolution: MAPPING_ONLY
 #opendistro_security.audit.resolve_bulk_requests: false
 # Disable some categories
 #opendistro_security.audit.config.disabled_categories: ["AUTHENTICATED","GRANTED_PRIVILEGES"]
-# Disable some requests (wildcard or regex of actions or rest request paths)
+# Disable some requests (WildcardMatcher or regex of actions or rest request paths)
 #opendistro_security.audit.ignore_requests: ["indices:data/read/*","*_bulk"]
 # Tune threadpool size, default is 10
 #opendistro_security.audit.threadpool.size: 10
