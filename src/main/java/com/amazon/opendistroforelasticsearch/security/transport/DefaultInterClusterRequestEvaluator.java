@@ -62,7 +62,7 @@ public final class DefaultInterClusterRequestEvaluator implements InterClusterRe
 
     public DefaultInterClusterRequestEvaluator(final Settings settings) {
         this.certOid = settings.get(ConfigConstants.OPENDISTRO_SECURITY_CERT_OID, "1.2.3.4.5.5");
-        this.staticNodesDnFromEsYml = WildcardMatcher.pattern(
+        this.staticNodesDnFromEsYml = WildcardMatcher.from(
                 settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_NODES_DN, Collections.emptyList()),
                 false
         );
@@ -170,6 +170,6 @@ public final class DefaultInterClusterRequestEvaluator implements InterClusterRe
 
     @Subscribe
     public void onNodesDnModelChanged(NodesDnModel nm) {
-        this.dynamicNodesDn = Collections.unmodifiableMap(nm.getNodesDn());
+        this.dynamicNodesDn = nm.getNodesDn();
     }
 }

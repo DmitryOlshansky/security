@@ -75,7 +75,7 @@ public class ComplianceConfig {
     private final boolean logExternalConfig;
     private final boolean logInternalConfig;
     private final LoadingCache<String, WildcardMatcher> cache;
-    private final WildcardMatcher immutableIndicesPatterns;
+    private final WildcardMatcher immutableIndicesMatcher;
     private final byte[] salt16;
     private final String opendistrosecurityIndex;
     private final IndexResolverReplacer irr;
@@ -93,13 +93,13 @@ public class ComplianceConfig {
         final List<String> watchedReadFields = this.settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_READ_WATCHED_FIELDS,
                 Collections.emptyList(), false);
 
-        watchedWriteIndices = WildcardMatcher.pattern(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_WATCHED_INDICES, Collections.emptyList()));
+        watchedWriteIndices = WildcardMatcher.from(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_WATCHED_INDICES, Collections.emptyList()));
         logDiffsForWrite = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_LOG_DIFFS, false);
         logWriteMetadataOnly = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_METADATA_ONLY, false);
         logReadMetadataOnly = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_READ_METADATA_ONLY, false);
         logExternalConfig = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_EXTERNAL_CONFIG_ENABLED, false);
         logInternalConfig = settings.getAsBoolean(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_INTERNAL_CONFIG_ENABLED, false);
-        immutableIndicesPatterns = WildcardMatcher.pattern(new HashSet<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_IMMUTABLE_INDICES, Collections.emptyList())));
+        immutableIndicesMatcher = WildcardMatcher.from(new HashSet<>(settings.getAsList(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_IMMUTABLE_INDICES, Collections.emptyList())));
         final String saltAsString = settings.get(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_SALT, ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_SALT_DEFAULT);
         final byte[] saltAsBytes = saltAsString.getBytes(StandardCharsets.UTF_8);
 
@@ -125,10 +125,10 @@ public class ComplianceConfig {
             if(split.isEmpty()) {
                 continue;
             } else if(split.size() == 1) {
-                readEnabledFields.put(WildcardMatcher.pattern(split.get(0)), Collections.singleton("*"));
+                readEnabledFields.put(WildcardMatcher.from(split.get(0)), Collections.singleton("*"));
             } else {
                 Set<String> _fields = new HashSet<String>(split.subList(1, split.size()));
-                readEnabledFields.put(WildcardMatcher.pattern(split.get(0)), _fields);
+                readEnabledFields.put(WildcardMatcher.from(split.get(0)), _fields);
             }
         }
 
@@ -153,7 +153,7 @@ public class ComplianceConfig {
                 .build(new CacheLoader<String, WildcardMatcher>() {
                     @Override
                     public WildcardMatcher load(String index) throws Exception {
-                        return WildcardMatcher.pattern(getFieldsForIndex0(index));
+                        return WildcardMatcher.from(getFieldsForIndex0(index));
                     }
                 });
     }
@@ -300,7 +300,7 @@ public class ComplianceConfig {
             return false;
         }
         
-        if(immutableIndicesPatterns == WildcardMatcher.NONE) {
+        if(immutableIndicesMatcher == WildcardMatcher.NONE) {
             return false;
         }
         
@@ -308,7 +308,7 @@ public class ComplianceConfig {
         final Set<String> allIndices = resolved.getAllIndices();
 
 
-        return immutableIndicesPatterns.matchAny(allIndices);
+        return immutableIndicesMatcher.matchAny(allIndices);
     }
 
     public byte[] getSalt16() {

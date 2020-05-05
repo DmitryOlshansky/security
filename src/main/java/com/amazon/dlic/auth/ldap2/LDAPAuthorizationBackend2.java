@@ -70,8 +70,8 @@ public class LDAPAuthorizationBackend2 implements AuthorizationBackend, Destroya
 
     protected static final Logger log = LogManager.getLogger(LDAPAuthorizationBackend2.class);
     private final Settings settings;
-    private final WildcardMatcher skipUsersFilter;
-    private final WildcardMatcher nestedRoleFilter;
+    private final WildcardMatcher skipUsersMatcher;
+    private final WildcardMatcher nestedRoleMatcher;
     private final List<Map.Entry<String, Settings>> roleBaseSettings;
     private ConnectionPool connectionPool;
     private ConnectionFactory connectionFactory;
@@ -79,9 +79,9 @@ public class LDAPAuthorizationBackend2 implements AuthorizationBackend, Destroya
 
     public LDAPAuthorizationBackend2(final Settings settings, final Path configPath) throws SSLConfigException {
         this.settings = settings;
-        this.skipUsersFilter = WildcardMatcher.pattern(settings.getAsList(ConfigConstants.LDAP_AUTHZ_SKIP_USERS,
+        this.skipUsersMatcher = WildcardMatcher.from(settings.getAsList(ConfigConstants.LDAP_AUTHZ_SKIP_USERS,
                 Collections.emptyList()));
-        this.nestedRoleFilter = WildcardMatcher.pattern(settings.getAsList(ConfigConstants.LDAP_AUTHZ_NESTEDROLEFILTER,
+        this.nestedRoleMatcher = WildcardMatcher.from(settings.getAsList(ConfigConstants.LDAP_AUTHZ_NESTEDROLEFILTER,
                 Collections.emptyList()));
         this.roleBaseSettings = getRoleSearchSettings(settings);
 
@@ -185,7 +185,7 @@ public class LDAPAuthorizationBackend2 implements AuthorizationBackend, Destroya
             log.trace("dn: {}", dn);
         }
 
-        if (skipUsersFilter.test(authenticatedUser)) {
+        if (skipUsersMatcher.test(authenticatedUser)) {
             if (log.isDebugEnabled()) {
                 log.debug("Skipped search roles of user {}/{}", authenticatedUser, originalUserName);
             }
@@ -352,7 +352,7 @@ public class LDAPAuthorizationBackend2 implements AuthorizationBackend, Destroya
                     }
 
                     final Set<LdapName> nestedRoles = resolveNestedRoles(roleLdapName, connection, userRoleNames, 0,
-                            rolesearchEnabled, nameRoleSearchBaseKeys, nestedRoleFilter);
+                            rolesearchEnabled, nameRoleSearchBaseKeys, nestedRoleMatcher);
 
                     if (log.isTraceEnabled()) {
                         log.trace("{} nested roles for {}", nestedRoles.size(), roleLdapName);

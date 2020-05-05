@@ -87,19 +87,19 @@ public class OpenDistroSecurityFlsDlsIndexSearcherWrapper extends OpenDistroSecu
             final Map<WildcardMatcher, Set<String>> maskedFieldsMap = (Map<WildcardMatcher, Set<String>>) HeaderHelper.deserializeSafeFromHeader(threadContext,
                     ConfigConstants.OPENDISTRO_SECURITY_MASKED_FIELD_HEADER);
 
-            final WildcardMatcher flsEval = OpenDistroSecurityUtils.evalMap(allowedFlsFields, index.getName());
-            final WildcardMatcher dlsEval = OpenDistroSecurityUtils.evalMap(queries, index.getName());
-            final WildcardMatcher maskedEval = OpenDistroSecurityUtils.evalMap(maskedFieldsMap, index.getName());
+            final WildcardMatcher flsMatcher = OpenDistroSecurityUtils.evalMap(allowedFlsFields, index.getName());
+            final WildcardMatcher dlsMatcher = OpenDistroSecurityUtils.evalMap(queries, index.getName());
+            final WildcardMatcher maskedMatcher = OpenDistroSecurityUtils.evalMap(maskedFieldsMap, index.getName());
 
-            if (flsEval != null) {
+            if (flsMatcher != null) {
                 flsFields = new HashSet<>(metaFields);
-                flsFields.addAll(allowedFlsFields.get(flsEval));
+                flsFields.addAll(allowedFlsFields.get(flsMatcher));
             }
 
 
 
-            if (dlsEval != null) {
-                final Set<String> unparsedDlsQueries = queries.get(dlsEval);
+            if (dlsMatcher != null) {
+                final Set<String> unparsedDlsQueries = queries.get(dlsMatcher);
                 if(unparsedDlsQueries != null && !unparsedDlsQueries.isEmpty()) {
                     //disable reader optimizations
                     dlsQuery = DlsQueryParser.parse(unparsedDlsQueries, this.indexService.newQueryShardContext(shardId.getId(), null, nowInMillis, null)
@@ -107,9 +107,9 @@ public class OpenDistroSecurityFlsDlsIndexSearcherWrapper extends OpenDistroSecu
                 }
             }
 
-            if (maskedEval != null) {
+            if (maskedMatcher != null) {
                 maskedFields = new HashSet<>();
-                maskedFields.addAll(maskedFieldsMap.get(maskedEval));
+                maskedFields.addAll(maskedFieldsMap.get(maskedMatcher));
             }
         }
 

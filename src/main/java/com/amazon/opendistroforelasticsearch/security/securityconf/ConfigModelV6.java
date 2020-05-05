@@ -365,19 +365,19 @@ public class ConfigModelV6 extends ConfigModel {
             for (SecurityRole sr : roles) {
                 for (IndexPattern ip : sr.getIpatterns()) {
                     final Set<String> maskedFields = ip.getMaskedFields();
-                    final WildcardMatcher indexPattern = ip.getUnresolvedIndexPattern(user);
+                    final WildcardMatcher indexMatcher = ip.getUnresolvedIndexMatcher(user);
                     WildcardMatcher concreteIndices = WildcardMatcher.NONE;
 
                     if ((maskedFields != null && maskedFields.size() > 0)) {
-                        concreteIndices = ip.getResolvedIndexPattern(user, resolver, cs);
+                        concreteIndices = ip.getResolvedIndexMatcher(user, resolver, cs);
                     }
 
                     if (maskedFields != null && maskedFields.size() > 0) {
 
-                        if (maskedFieldsMap.containsKey(indexPattern)) {
-                            maskedFieldsMap.get(indexPattern).addAll(maskedFields);
+                        if (maskedFieldsMap.containsKey(indexMatcher)) {
+                            maskedFieldsMap.get(indexMatcher).addAll(maskedFields);
                         } else {
-                            maskedFieldsMap.put(indexPattern, Sets.newHashSet(maskedFields));
+                            maskedFieldsMap.put(indexMatcher, Sets.newHashSet(maskedFields));
                         }
 
                         if (maskedFieldsMap.containsKey(concreteIndices)) {
@@ -401,19 +401,19 @@ public class ConfigModelV6 extends ConfigModel {
                 for (IndexPattern ip : sr.getIpatterns()) {
                     final Set<String> fls = ip.getFls();
                     final String dls = ip.getDlsQuery(user);
-                    final WildcardMatcher indexPattern = ip.getUnresolvedIndexPattern(user);
+                    final WildcardMatcher indexMatcher = ip.getUnresolvedIndexMatcher(user);
                     WildcardMatcher concreteIndices = WildcardMatcher.NONE;
 
                     if ((dls != null && dls.length() > 0) || (fls != null && fls.size() > 0)) {
-                        concreteIndices = ip.getResolvedIndexPattern(user, resolver, cs);
+                        concreteIndices = ip.getResolvedIndexMatcher(user, resolver, cs);
                     }
 
                     if (dls != null && dls.length() > 0) {
 
-                        if (dlsQueries.containsKey(indexPattern)) {
-                            dlsQueries.get(indexPattern).add(dls);
+                        if (dlsQueries.containsKey(indexMatcher)) {
+                            dlsQueries.get(indexMatcher).add(dls);
                         } else {
-                            dlsQueries.put(indexPattern, Sets.newHashSet(dls));
+                            dlsQueries.put(indexMatcher, Sets.newHashSet(dls));
                         }
 
                         if (dlsQueries.containsKey(concreteIndices)) {
@@ -426,10 +426,10 @@ public class ConfigModelV6 extends ConfigModel {
 
                     if (fls != null && fls.size() > 0) {
 
-                        if (flsFields.containsKey(indexPattern)) {
-                            flsFields.get(indexPattern).addAll(fls);
+                        if (flsFields.containsKey(indexMatcher)) {
+                            flsFields.get(indexMatcher).addAll(fls);
                         } else {
-                            flsFields.put(indexPattern, Sets.newHashSet(fls));
+                            flsFields.put(indexMatcher, Sets.newHashSet(fls));
                         }
 
                         if (flsFields.containsKey(concreteIndices)) {
@@ -503,7 +503,7 @@ public class ConfigModelV6 extends ConfigModel {
         }
 
         private boolean impliesClusterPermission(String action) {
-            return WildcardMatcher.pattern(clusterPerms).test(action);
+            return WildcardMatcher.from(clusterPerms).test(action);
         }
 
         //get indices which are permitted for the given types and actions
@@ -517,13 +517,13 @@ public class ConfigModelV6 extends ConfigModel {
                 boolean patternMatch = false;
                 final Set<TypePerm> tperms = p.getTypePerms();
                 for (TypePerm tp : tperms) {
-                    if (tp.typePattern.matchAny(resolved.getTypes())) {
+                    if (tp.typeMatcher.matchAny(resolved.getTypes())) {
                         patternMatch = tp.getPerms().matchAll(actions);
                     }
                 }
                 if (patternMatch) {
                     //resolved but can contain patterns for nonexistent indices
-                    final WildcardMatcher permitted = p.getResolvedIndexPattern(user, resolver, cs); //maybe they do not exist
+                    final WildcardMatcher permitted = p.getResolvedIndexMatcher(user, resolver, cs); //maybe they do not exist
                     final Set<String> res = new HashSet<>();
                     if (!resolved.isLocalAll() && !resolved.getAllIndices().contains("*") && !resolved.getAllIndices().contains("_all")) {
                         //resolved but can contain patterns for nonexistent indices
@@ -728,16 +728,16 @@ public class ConfigModelV6 extends ConfigModel {
                     + System.lineSeparator() + "          fls=" + fls + System.lineSeparator() + "          typePerms=" + typePerms;
         }
 
-        public WildcardMatcher getUnresolvedIndexPattern(User user) {
-            return WildcardMatcher.pattern(replaceProperties(indexPattern, user));
+        public WildcardMatcher getUnresolvedIndexMatcher(User user) {
+            return WildcardMatcher.from(replaceProperties(indexPattern, user));
         }
 
-        private WildcardMatcher getResolvedIndexPattern(User user, IndexNameExpressionResolver resolver, ClusterService cs) {
+        private WildcardMatcher getResolvedIndexMatcher(User user, IndexNameExpressionResolver resolver, ClusterService cs) {
             // Note: this code relies on getUnresolvedIndexPattern returning non-multipattern WildcardMatcher
             // so that toString and construction from toString back would work as expected
-            WildcardMatcher unresolved = getUnresolvedIndexPattern(user);
+            WildcardMatcher unresolved = getUnresolvedIndexMatcher(user);
             String[] resolved = null;
-            if (unresolved.isPattern()) {
+            if (!(unresolved instanceof WildcardMatcher.Exact)) {
                 final String[] aliasesForPermittedPattern = cs.state().getMetaData().getAliasAndIndexLookup().entrySet().stream()
                         .filter(e -> e.getValue().isAlias()).filter(e -> unresolved.test(e.getKey())).map(e -> e.getKey())
                         .toArray(String[]::new);
@@ -756,7 +756,7 @@ public class ConfigModelV6 extends ConfigModel {
                 //append unresolved value for pattern matching
                 String[] retval = Arrays.copyOf(resolved, resolved.length + 1);
                 retval[retval.length - 1] = unresolved.toString();
-                return WildcardMatcher.pattern(retval);
+                return WildcardMatcher.from(retval);
             }
         }
 
@@ -779,11 +779,11 @@ public class ConfigModelV6 extends ConfigModel {
     }
 
     public static class TypePerm {
-        private final WildcardMatcher typePattern;
+        private final WildcardMatcher typeMatcher;
         private final Set<String> perms = new HashSet<>();
 
         private TypePerm(String typePattern) {
-            this.typePattern = WildcardMatcher.ANY;
+            this.typeMatcher = WildcardMatcher.ANY;
         }
 
         private TypePerm addPerms(Collection<String> perms) {
@@ -798,7 +798,7 @@ public class ConfigModelV6 extends ConfigModel {
             final int prime = 31;
             int result = 1;
             result = prime * result + ((perms == null) ? 0 : perms.hashCode());
-            result = prime * result + ((typePattern == null) ? 0 : typePattern.hashCode());
+            result = prime * result + ((typeMatcher == null) ? 0 : typeMatcher.hashCode());
             return result;
         }
 
@@ -816,25 +816,25 @@ public class ConfigModelV6 extends ConfigModel {
                     return false;
             } else if (!perms.equals(other.perms))
                 return false;
-            if (typePattern == null) {
-                if (other.typePattern != null)
+            if (typeMatcher == null) {
+                if (other.typeMatcher != null)
                     return false;
-            } else if (!typePattern.equals(other.typePattern))
+            } else if (!typeMatcher.equals(other.typeMatcher))
                 return false;
             return true;
         }
 
         @Override
         public String toString() {
-            return System.lineSeparator() + "             typePattern=" + typePattern + System.lineSeparator() + "             perms=" + perms;
+            return System.lineSeparator() + "             typePattern=" + typeMatcher + System.lineSeparator() + "             perms=" + perms;
         }
 
-        public WildcardMatcher getTypePattern() {
-            return typePattern;
+        public WildcardMatcher getTypeMatcher() {
+            return typeMatcher;
         }
 
         public WildcardMatcher getPerms() {
-            return WildcardMatcher.pattern(perms);
+            return WildcardMatcher.from(perms);
         }
 
     }
@@ -924,14 +924,14 @@ public class ConfigModelV6 extends ConfigModel {
         }));
     }
 
-    private static final class IndexPatternsAndTypePermissions {
-        private static final Logger log = LogManager.getLogger(IndexPatternsAndTypePermissions.class);
+    private static final class IndexMatcherAndTypePermissions {
+        private static final Logger log = LogManager.getLogger(IndexMatcherAndTypePermissions.class);
 
-        private final WildcardMatcher pattern;
+        private final WildcardMatcher matcher;
         private final Set<TypePerm> typePerms;
 
-        public IndexPatternsAndTypePermissions(WildcardMatcher pattern, Set<TypePerm> typePerms) {
-            this.pattern = pattern;
+        public IndexMatcherAndTypePermissions(WildcardMatcher matcher, Set<TypePerm> typePerms) {
+            this.matcher = matcher;
             this.typePerms = typePerms;
         }
 
@@ -940,15 +940,15 @@ public class ConfigModelV6 extends ConfigModel {
         }
 
         public boolean matches(String index, String type, String action) {
-            boolean matchIndex = pattern.test(index);
+            boolean matchIndex = matcher.test(index);
             if (log.isDebugEnabled()) {
-                log.debug("index {} {} index pattern {}", index, b2s(matchIndex), pattern);
+                log.debug("index {} {} index pattern {}", index, b2s(matchIndex), matcher);
             }
             if (matchIndex) {
                 return typePerms.stream().anyMatch(tp -> {
-                    boolean matchType = tp.getTypePattern().test(type);
+                    boolean matchType = tp.getTypeMatcher().test(type);
                     if (log.isDebugEnabled()) {
-                        log.debug("type {} {} type pattern {}", type, b2s(matchType), tp.getTypePattern());
+                        log.debug("type {} {} type pattern {}", type, b2s(matchType), tp.getTypeMatcher());
                     }
                     if (matchType) {
                         boolean matchAction = tp.getPerms().test(action);
@@ -967,16 +967,16 @@ public class ConfigModelV6 extends ConfigModel {
     private static boolean impliesTypePerm(Set<IndexPattern> ipatterns, Resolved resolved, User user, String[] requestedActions,
                                            IndexNameExpressionResolver resolver, ClusterService cs) {
 
-        IndexPatternsAndTypePermissions[] indexPatternsAndTypePermissions = ipatterns
+        IndexMatcherAndTypePermissions[] indexMatcherAndTypePermissions = ipatterns
                 .stream()
-                .map(p -> new IndexPatternsAndTypePermissions(p.getResolvedIndexPattern(user, resolver, cs), p.getTypePerms()))
-                .toArray(IndexPatternsAndTypePermissions[]::new);
+                .map(p -> new IndexMatcherAndTypePermissions(p.getResolvedIndexMatcher(user, resolver, cs), p.getTypePerms()))
+                .toArray(IndexMatcherAndTypePermissions[]::new);
 
         return resolved.getAllIndices()
                 .stream().allMatch(index ->
                         resolved.getTypes().stream().allMatch(type ->
                                 Arrays.stream(requestedActions).allMatch(action ->
-                                        Arrays.stream(indexPatternsAndTypePermissions).anyMatch(ipatp ->
+                                        Arrays.stream(indexMatcherAndTypePermissions).anyMatch(ipatp ->
                                                 ipatp.matches(index, type, action)
                                         )
                                 )
@@ -1149,20 +1149,18 @@ public class ConfigModelV6 extends ConfigModel {
 
             if (((rolesMappingResolution == ConfigConstants.RolesMappingResolution.BOTH
                     || rolesMappingResolution == ConfigConstants.RolesMappingResolution.MAPPING_ONLY))) {
-                List<WildcardMatcher> userPattern = WildcardMatcher.patterns(users.keySet());
-                for (WildcardMatcher p : WildcardMatcher.getAllMatchingPatterns(userPattern, user.getName())) {
-                    securityRoles.addAll(users.get(p.toString()));
+
+                for (String p : WildcardMatcher.getAllMatchingPatterns(WildcardMatcher.matchers(users.keySet()), user.getName())) {
+                    securityRoles.addAll(users.get(p));
                 }
 
-                List<WildcardMatcher> barPattern = WildcardMatcher.patterns(bars.keySet());
-                for (WildcardMatcher p : WildcardMatcher.getAllMatchingPatterns(barPattern, user.getRoles())) {
-                    securityRoles.addAll(bars.get(p.toString()));
+                for (String p : WildcardMatcher.getAllMatchingPatterns(WildcardMatcher.matchers(bars.keySet()), user.getRoles())) {
+                    securityRoles.addAll(bars.get(p));
                 }
 
-                for (Set<String> p : abars.keySet()) {
-                    WildcardMatcher pattern = WildcardMatcher.pattern(p);
-                    if (pattern.matchAll(user.getRoles())) {
-                        securityRoles.addAll(abars.get(p));
+                for (Set<String> patterns : abars.keySet()) {
+                    if (patterns.stream().allMatch(p -> WildcardMatcher.from(p).matchAny(user.getRoles()))) {
+                        securityRoles.addAll(abars.get(patterns));
                     }
                 }
 
@@ -1170,17 +1168,17 @@ public class ConfigModelV6 extends ConfigModel {
                     //IPV4 or IPv6 (compressed and without scope identifiers)
                     final String ipAddress = caller.getAddress();
 
-                    final List<WildcardMatcher> hostPatterns = WildcardMatcher.patterns(hosts.keySet());
-                    for (WildcardMatcher p : WildcardMatcher.getAllMatchingPatterns(hostPatterns, ipAddress)) {
-                        securityRoles.addAll(hosts.get(p.toString()));
+                    final List<WildcardMatcher> hostMatchers = WildcardMatcher.matchers(hosts.keySet());
+                    for (String p : WildcardMatcher.getAllMatchingPatterns(hostMatchers, ipAddress)) {
+                        securityRoles.addAll(hosts.get(p));
                     }
 
                     if (caller.address() != null
                             && (hostResolverMode.equalsIgnoreCase("ip-hostname") || hostResolverMode.equalsIgnoreCase("ip-hostname-lookup"))) {
                         final String hostName = caller.address().getHostString();
 
-                        for (WildcardMatcher p : WildcardMatcher.getAllMatchingPatterns(hostPatterns, hostName)) {
-                            securityRoles.addAll(hosts.get(p.toString()));
+                        for (String p : WildcardMatcher.getAllMatchingPatterns(hostMatchers, hostName)) {
+                            securityRoles.addAll(hosts.get(p));
                         }
                     }
 
@@ -1188,8 +1186,8 @@ public class ConfigModelV6 extends ConfigModel {
 
                         final String resolvedHostName = caller.address().getHostName();
 
-                        for (WildcardMatcher p : WildcardMatcher.getAllMatchingPatterns(hostPatterns, resolvedHostName)) {
-                            securityRoles.addAll(hosts.get(p.toString()));
+                        for (String p : WildcardMatcher.getAllMatchingPatterns(hostMatchers, resolvedHostName)) {
+                            securityRoles.addAll(hosts.get(p));
                         }
                     }
                 }

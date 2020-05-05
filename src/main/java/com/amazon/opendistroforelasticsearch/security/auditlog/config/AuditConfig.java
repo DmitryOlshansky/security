@@ -61,10 +61,10 @@ public class AuditConfig {
             this.logRequestBody = logRequestBody;
             this.resolveIndices = resolveIndices;
             this.excludeSensitiveHeaders = excludeSensitiveHeaders;
-            this.ignoredAuditUsers = WildcardMatcher.pattern(ignoredAuditUsers != null ? ignoredAuditUsers : Collections.emptyList());
-            this.ignoredComplianceUsersForRead = WildcardMatcher.pattern(ignoredComplianceUsersForRead != null ? ignoredComplianceUsersForRead : Collections.emptyList());
-            this.ignoredComplianceUsersForWrite = WildcardMatcher.pattern(ignoredComplianceUsersForWrite != null ? ignoredComplianceUsersForWrite : Collections.emptyList());
-            this.ignoreAuditRequests = WildcardMatcher.pattern(ignoredAuditRequests != null ? ignoredAuditRequests : Collections.emptyList());
+            this.ignoredAuditUsers = WildcardMatcher.from(ignoredAuditUsers);
+            this.ignoredComplianceUsersForRead = WildcardMatcher.from(ignoredComplianceUsersForRead);
+            this.ignoredComplianceUsersForWrite = WildcardMatcher.from(ignoredComplianceUsersForWrite);
+            this.ignoreAuditRequests = WildcardMatcher.from(ignoredAuditRequests);
             this.disabledRestCategories = disabledRestCategories;
             this.disabledTransportCategories = disabledTransportCategories;
         }

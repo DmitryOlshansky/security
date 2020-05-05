@@ -118,9 +118,9 @@ public class DlsFlsValveImpl implements DlsFlsRequestValve {
             final Map<WildcardMatcher, Set<String>> queries = (Map<WildcardMatcher, Set<String>>) HeaderHelper.deserializeSafeFromHeader(threadPool.getThreadContext(),
                     ConfigConstants.OPENDISTRO_SECURITY_DLS_QUERY_HEADER);
 
-            final WildcardMatcher dlsEval = OpenDistroSecurityUtils.evalMap(queries, context.indexShard().indexSettings().getIndex().getName());
+            final WildcardMatcher matcher = OpenDistroSecurityUtils.evalMap(queries, context.indexShard().indexSettings().getIndex().getName());
 
-            if (dlsEval != null) {
+            if (matcher != null) {
 
                 if(context.suggest() != null) {
                     return;
@@ -128,7 +128,7 @@ public class DlsFlsValveImpl implements DlsFlsRequestValve {
 
                 assert context.parsedQuery() != null;
 
-                final Set<String> unparsedDlsQueries = queries.get(dlsEval);
+                final Set<String> unparsedDlsQueries = queries.get(matcher);
                 if (unparsedDlsQueries != null && !unparsedDlsQueries.isEmpty()) {
                     final ParsedQuery dlsQuery = DlsQueryParser.parse(unparsedDlsQueries, context.parsedQuery(), context.getQueryShardContext(), namedXContentRegistry);
                     context.parsedQuery(dlsQuery);

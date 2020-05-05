@@ -30,6 +30,12 @@
 
 package com.amazon.opendistroforelasticsearch.security.support;
 
+import com.amazon.dlic.auth.ldap.LdapUser;
+import org.ldaptive.AbstractLdapBean;
+import org.ldaptive.LdapAttribute;
+import org.ldaptive.LdapEntry;
+import org.ldaptive.SearchEntry;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -38,22 +44,80 @@ import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamClass;
+import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.elasticsearch.ElasticsearchException;
 
-import com.amazon.opendistroforelasticsearch.security.resolver.IndexResolverReplacer;
 import com.amazon.opendistroforelasticsearch.security.user.User;
 import com.google.common.io.BaseEncoding;
 
 public class Base64Helper {
+
+    private static final Set<Class<?>> SAFE_CLASSES = new HashSet<>(
+        Arrays.asList(
+            String.class,
+            SocketAddress.class,
+            InetSocketAddress.class,
+            Pattern.class,
+            User.class,
+            SourceFieldsContext.class,
+            LdapUser.class,
+            SearchEntry.class,
+            LdapEntry.class,
+            AbstractLdapBean.class,
+            LdapAttribute.class
+        )
+    );
+
+    private static final List<Class<?>> SAFE_ASSIGNABLE_FROM_CLASSES = Arrays.asList(
+        InetAddress.class,
+        Number.class,
+        Collection.class,
+        Map.class,
+        Enum.class,
+        WildcardMatcher.class
+    );
+
+    private static final Set<String> SAFE_CLASS_NAMES = new HashSet<>(
+        Arrays.asList(
+            "org.ldaptive.LdapAttribute$LdapAttributeValues"
+        )
+    );
+
+    private static boolean isSafeClass(Class cls) {
+        return cls.isArray() ||
+            SAFE_CLASSES.contains(cls) ||
+            SAFE_CLASS_NAMES.contains(cls.getName()) ||
+            SAFE_ASSIGNABLE_FROM_CLASSES.stream().anyMatch(c -> c.isAssignableFrom(cls));
+    }
+
+    private final static class SafeObjectOutputStream extends ObjectOutputStream {
+
+        public SafeObjectOutputStream(OutputStream out) throws IOException {
+            super(out);
+            enableReplaceObject(true);
+        }
+
+        @Override
+        protected Object replaceObject(Object obj) throws IOException {
+            Class<?> clazz = obj.getClass();
+            if (isSafeClass(clazz)) {
+                return obj;
+            }
+            throw new IOException("Unauthorized serialization attempt " + clazz.getName());
+        }
+    }
 
     public static String serializeObject(final Serializable object) {
 
@@ -63,12 +127,12 @@ public class Base64Helper {
 
         try {
             final ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            final ObjectOutputStream out = new ObjectOutputStream(bos);
+            final ObjectOutputStream out = new SafeObjectOutputStream(bos);
             out.writeObject(object);
             final byte[] bytes = bos.toByteArray();
             return BaseEncoding.base64().encode(bytes);
         } catch (final Exception e) {
-            throw new ElasticsearchException(e.toString());
+            throw new ElasticsearchException("Fail to serialize %s", object, e);
         }
     }
 
@@ -100,17 +164,6 @@ public class Base64Helper {
 
     private final static class SafeObjectInputStream extends ObjectInputStream {
 
-        private static final List<String> SAFE_CLASSES = new ArrayList<>();
-
-        static {
-            SAFE_CLASSES.add("com.amazon.dlic.auth.ldap.LdapUser");
-            SAFE_CLASSES.add("org.ldaptive.SearchEntry");
-            SAFE_CLASSES.add("org.ldaptive.LdapEntry");
-            SAFE_CLASSES.add("org.ldaptive.AbstractLdapBean");
-            SAFE_CLASSES.add("org.ldaptive.LdapAttribute");
-            SAFE_CLASSES.add("org.ldaptive.LdapAttribute$LdapAttributeValues");
-        }
-
         public SafeObjectInputStream(InputStream in) throws IOException {
             super(in);
         }
@@ -119,27 +172,11 @@ public class Base64Helper {
         protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
 
             Class<?> clazz = super.resolveClass(desc);
-
-            if (
-                    clazz.isArray() ||
-                    clazz.equals(String.class) ||
-                    clazz.equals(SocketAddress.class) ||
-                    clazz.equals(InetSocketAddress.class) ||
-                    InetAddress.class.isAssignableFrom(clazz) ||
-                    Number.class.isAssignableFrom(clazz) ||
-                    Collection.class.isAssignableFrom(clazz) ||
-                    Map.class.isAssignableFrom(clazz) ||
-                    Enum.class.isAssignableFrom(clazz) ||
-                    clazz.equals(User.class) ||
-                    clazz.equals(IndexResolverReplacer.Resolved.class) ||
-                    clazz.equals(SourceFieldsContext.class) ||
-                    SAFE_CLASSES.contains(clazz.getName())
-               ) {
-
+            if (isSafeClass(clazz)) {
                 return clazz;
             }
 
-            throw new InvalidClassException("Unauthorized deserialization attempt", clazz.getName());
+            throw new InvalidClassException("Unauthorized deserialization attempt ", clazz.getName());
         }
     }
 }
